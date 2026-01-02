@@ -37213,7 +37213,7 @@ if(a0<1||a0>4)A.a7(A.bs("suspensionReason debe estar entre 1 y 4, recibido: "+a0
 f=a1.length
 if(f===0||f>4)A.a7(A.bs('userId debe tener entre 1 y 4 caracteres, recibido: "'+a1+'"',null))
 f=t.N
-n=A.ha("https://script.google.com/macros/s/AKfycbwzmZvr16kbq8VYAggRiz8wn0D9EEAQQqVMBuSej28dNrUDfysRRvh39uVCToRfydziaA/exec").SG(A.al(["action","save","user_id",a1.toUpperCase(),"fatigue_level",B.i.k(b),"capacity_level",B.i.k(a),"suspension_reason",B.i.k(a0),"timestamp",B.i.k(Date.now())],f,t.z))
+n=A.ha("https://script.google.com/macros/s/AKfycbw42COg_ZhGtInvrXz4tynp7JFsGCFWLrR7g6S9QqTg5b6uSqlpF0hxZ5_dfsAeI-06nQ/exec").SG(A.al(["action","save","user_id",a1.toUpperCase(),"fatigue_level",B.i.k(b),"capacity_level",B.i.k(a),"suspension_reason",B.i.k(a0),"timestamp",B.i.k(Date.now())],f,t.z))
 n.gof()
 s=7
 return A.V(A.aFN(n,A.al(["Accept","application/json"],f,f)).ty(B.m8,new A.Yh()),$async$tY)

@@ -12,8 +12,8 @@ import 'package:flutter/foundation.dart';
 /// desde navegadores web. Esta versión usa peticiones GET con parámetros
 /// en la URL, que es la forma correcta de comunicarse con Google Apps Script.
 class GoogleSheetsService {
-  // ✅ URL de Google Apps Script configurada (CORS-FIXED con GET)
-  static const String _webAppUrl = 'https://script.google.com/macros/s/AKfycbwzmZvr16kbq8VYAggRiz8wn0D9EEAQQqVMBuSej28dNrUDfysRRvh39uVCToRfydziaA/exec';
+  // ✅ URL de Google Apps Script configurada (VERSIÓN FINAL FUNCIONANDO)
+  static const String _webAppUrl = 'https://script.google.com/macros/s/AKfycbw42COg_ZhGtInvrXz4tynp7JFsGCFWLrR7g6S9QqTg5b6uSqlpF0hxZ5_dfsAeI-06nQ/exec';
   
   // Configuración de timeouts
   static const Duration _requestTimeout = Duration(seconds: 30);
