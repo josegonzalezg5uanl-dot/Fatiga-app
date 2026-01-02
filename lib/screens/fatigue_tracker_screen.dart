@@ -169,10 +169,10 @@ class _FatigueTrackerScreenState extends State<FatigueTrackerScreen> {
     try {
       // Enviar los tres valores (0-100, 0-100, 1-4) y el identificador
       final success = await _sheetsService.sendFatigueData(
-        _fatigueLevel.toInt(),
-        _capacityLevel.toInt(),
-        _suspensionReason!,
-        userId,
+        fatigueLevel: _fatigueLevel.toInt(),
+        capacityLevel: _capacityLevel.toInt(),
+        suspensionReason: _suspensionReason!,
+        userId: userId,
       );
       
       if (!mounted) return;

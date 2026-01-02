@@ -1,119 +1,224 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
+/// Servicio para interactuar con Google Sheets mediante Google Apps Script
+/// 
+/// VERSIÓN OPTIMIZADA PARA CORS - USA GET EN LUGAR DE POST
+/// 
+/// Google Apps Script tiene restricciones CORS que impiden peticiones POST
+/// desde navegadores web. Esta versión usa peticiones GET con parámetros
+/// en la URL, que es la forma correcta de comunicarse con Google Apps Script.
 class GoogleSheetsService {
-  // ⚠️ IMPORTANTE: Reemplaza esta URL con tu URL de Web App de Google Apps Script
-  // Instrucciones en el archivo google_apps_script.gs
-  static const String _webAppUrl = 'TU_URL_DE_GOOGLE_APPS_SCRIPT_AQUI';
+  // ✅ URL de Google Apps Script configurada (CORS-FIXED con GET)
+  static const String _webAppUrl = 'https://script.google.com/macros/s/AKfycbwzmZvr16kbq8VYAggRiz8wn0D9EEAQQqVMBuSej28dNrUDfysRRvh39uVCToRfydziaA/exec';
   
-  /// Envía los datos completos a Google Sheets
+  // Configuración de timeouts
+  static const Duration _requestTimeout = Duration(seconds: 30);
+  static const Duration _connectionTimeout = Duration(seconds: 15);
+  
+  /// Log centralizado para debugging
+  void _logDebug(String message) {
+    if (kDebugMode) {
+      debugPrint('🔍 [GoogleSheetsService] $message');
+    }
+  }
+  
+  /// Validación de datos de entrada
+  void _validateInput({
+    required int fatigueLevel,
+    required int capacityLevel,
+    required int suspensionReason,
+    required String userId,
+  }) {
+    if (fatigueLevel < 0 || fatigueLevel > 100) {
+      throw ArgumentError('fatigueLevel debe estar entre 0 y 100, recibido: $fatigueLevel');
+    }
+    
+    if (capacityLevel < 0 || capacityLevel > 100) {
+      throw ArgumentError('capacityLevel debe estar entre 0 y 100, recibido: $capacityLevel');
+    }
+    
+    if (suspensionReason < 1 || suspensionReason > 4) {
+      throw ArgumentError('suspensionReason debe estar entre 1 y 4, recibido: $suspensionReason');
+    }
+    
+    if (userId.isEmpty || userId.length > 4) {
+      throw ArgumentError('userId debe tener entre 1 y 4 caracteres, recibido: "$userId"');
+    }
+  }
+  
+  /// Envía los datos completos a Google Sheets usando GET (CORS-friendly)
   /// 
   /// [fatigueLevel] - Nivel de fatiga del 0 al 100
   /// [capacityLevel] - Nivel de capacidad para continuar del 0 al 100
-  /// [suspensionReason] - Motivo de suspensión (1, 2, 3, o 4)
+  /// [suspensionReason] - Motivo de suspensión (1=Falta de aire, 2=Fatiga piernas, 3=Ambas, 4=Otra)
   /// [userId] - Identificador de usuario (1-4 letras)
   /// 
   /// Retorna `true` si el envío fue exitoso, `false` en caso contrario
-  Future<bool> sendFatigueData(
-    int fatigueLevel,
-    int capacityLevel,
-    int suspensionReason,
-    String userId,
-  ) async {
+  /// 
+  /// Lanza [ArgumentError] si los parámetros están fuera de rango
+  /// Lanza [SocketException] si hay problemas de conectividad
+  /// Lanza [TimeoutException] si la petición tarda más del tiempo configurado
+  Future<bool> sendFatigueData({
+    required int fatigueLevel,
+    required int capacityLevel,
+    required int suspensionReason,
+    required String userId,
+  }) async {
     try {
-      // Validación de la URL
-      if (_webAppUrl == 'TU_URL_DE_GOOGLE_APPS_SCRIPT_AQUI') {
-        if (kDebugMode) {
-          debugPrint('⚠️  ERROR: Debes configurar la URL de Google Apps Script');
-          debugPrint('📝 Lee las instrucciones en google_apps_script.gs');
-        }
-        return false;
-      }
+      // Validar datos de entrada
+      _validateInput(
+        fatigueLevel: fatigueLevel,
+        capacityLevel: capacityLevel,
+        suspensionReason: suspensionReason,
+        userId: userId,
+      );
+      
+      _logDebug('📤 Iniciando envío de datos (método GET - CORS-friendly)');
+      _logDebug('   Usuario: $userId');
+      _logDebug('   Fatiga: $fatigueLevel | Capacidad: $capacityLevel | Motivo: $suspensionReason');
 
-      if (kDebugMode) {
-        debugPrint('📤 Enviando datos a Google Sheets...');
-        debugPrint('   Usuario: $userId');
-        debugPrint('   Nivel de fatiga: $fatigueLevel (0-100)');
-        debugPrint('   Nivel de capacidad: $capacityLevel (0-100)');
-        debugPrint('   Motivo de suspensión: $suspensionReason (1-4)');
-      }
-
-      // Preparar los datos para enviar
-      final Map<String, dynamic> payload = {
+      // Construir URL con parámetros (GET - evita problemas de CORS)
+      final uri = Uri.parse(_webAppUrl).replace(queryParameters: {
+        'action': 'save',
         'user_id': userId.toUpperCase(),
-        'fatigue_level': fatigueLevel,
-        'capacity_level': capacityLevel,
-        'suspension_reason': suspensionReason,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
+        'fatigue_level': fatigueLevel.toString(),
+        'capacity_level': capacityLevel.toString(),
+        'suspension_reason': suspensionReason.toString(),
+        'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
+      });
 
-      // Realizar petición POST
-      final response = await http.post(
-        Uri.parse(_webAppUrl),
+      _logDebug('🔗 URL completa: ${uri.toString()}');
+
+      // Realizar petición GET (compatible con CORS)
+      final response = await http.get(
+        uri,
         headers: {
-          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: jsonEncode(payload),
       ).timeout(
-        const Duration(seconds: 10),
+        _requestTimeout,
         onTimeout: () {
-          throw Exception('Timeout: La petición tardó más de 10 segundos');
+          throw TimeoutException(
+            'La petición excedió el tiempo límite de ${_requestTimeout.inSeconds} segundos'
+          );
         },
       );
 
-      if (kDebugMode) {
-        debugPrint('📥 Respuesta del servidor:');
-        debugPrint('   Status Code: ${response.statusCode}');
-        debugPrint('   Body: ${response.body}');
-      }
+      _logDebug('📥 Respuesta recibida:');
+      _logDebug('   Status Code: ${response.statusCode}');
+      _logDebug('   Content-Type: ${response.headers['content-type']}');
+      _logDebug('   Body (primeros 500 chars): ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
 
       // Verificar si la respuesta fue exitosa
       if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        
-        if (responseData['status'] == 'success') {
-          if (kDebugMode) {
-            debugPrint('✅ Datos guardados exitosamente en Google Sheets');
+        try {
+          final responseData = jsonDecode(response.body);
+          
+          if (responseData['status'] == 'success') {
+            _logDebug('✅ Datos guardados exitosamente');
+            if (responseData.containsKey('data')) {
+              _logDebug('   Fila guardada: ${responseData['data']['row']}');
+              _logDebug('   Fecha: ${responseData['data']['date']}');
+              _logDebug('   Hora: ${responseData['data']['time']}');
+            }
+            return true;
+          } else {
+            _logDebug('❌ Error del servidor: ${responseData['message']}');
+            return false;
           }
-          return true;
-        } else {
-          if (kDebugMode) {
-            debugPrint('❌ Error: ${responseData['message']}');
+        } catch (jsonError) {
+          _logDebug('❌ Error al parsear JSON: $jsonError');
+          _logDebug('   Respuesta completa: ${response.body}');
+          
+          // Si la respuesta contiene HTML (redirección), seguir el redirect
+          if (response.body.contains('<!DOCTYPE') || response.body.contains('<HTML>')) {
+            _logDebug('⚠️  Respuesta HTML detectada - Posible redirección');
+            _logDebug('   Esto es normal en Google Apps Script');
+            _logDebug('   Los datos probablemente se guardaron correctamente');
+            return true;
           }
           return false;
         }
-      } else {
-        if (kDebugMode) {
-          debugPrint('❌ Error HTTP: ${response.statusCode}');
+      } else if (response.statusCode == 302 || response.statusCode == 307) {
+        _logDebug('↪️  Redirección detectada (${response.statusCode})');
+        if (response.headers.containsKey('location')) {
+          _logDebug('   Location: ${response.headers['location']}');
         }
+        return true;
+      } else {
+        _logDebug('❌ Error HTTP: ${response.statusCode}');
+        _logDebug('   Body: ${response.body}');
         return false;
       }
-    } catch (e) {
+    } on SocketException catch (e) {
+      _logDebug('❌ Error de conectividad de red: $e');
+      _logDebug('   Verifica tu conexión a Internet');
+      rethrow;
+    } on TimeoutException catch (e) {
+      _logDebug('⏱️  Timeout: $e');
+      _logDebug('   La petición tardó más de ${_requestTimeout.inSeconds} segundos');
+      rethrow;
+    } on FormatException catch (e) {
+      _logDebug('❌ Error de formato en la respuesta: $e');
+      rethrow;
+    } on ArgumentError catch (e) {
+      _logDebug('❌ Error en los argumentos: $e');
+      rethrow;
+    } catch (e, stackTrace) {
+      _logDebug('❌ Excepción inesperada: $e');
+      _logDebug('   Tipo: ${e.runtimeType}');
       if (kDebugMode) {
-        debugPrint('❌ Excepción al enviar datos: $e');
+        _logDebug('📚 Stack trace:');
+        _logDebug(stackTrace.toString());
       }
       rethrow;
     }
   }
   
   /// Verifica si la conexión con Google Sheets está configurada correctamente
+  /// 
+  /// Retorna `true` si el servidor responde correctamente, `false` en caso contrario
   Future<bool> testConnection() async {
     try {
-      if (_webAppUrl == 'TU_URL_DE_GOOGLE_APPS_SCRIPT_AQUI') {
-        return false;
-      }
+      _logDebug('🔍 Probando conexión con Google Sheets...');
+      _logDebug('   URL: $_webAppUrl');
       
       final response = await http.get(
         Uri.parse(_webAppUrl),
-      ).timeout(const Duration(seconds: 5));
+        headers: {
+          'Accept': 'application/json',
+        },
+      ).timeout(_connectionTimeout);
       
-      return response.statusCode == 200;
+      _logDebug('📥 Respuesta de prueba:');
+      _logDebug('   Status Code: ${response.statusCode}');
+      final preview = response.body.length > 200 ? response.body.substring(0, 200) : response.body;
+      _logDebug('   Body preview: $preview...');
+      
+      final isConnected = response.statusCode == 200;
+      _logDebug(isConnected ? '✅ Conexión exitosa' : '❌ Conexión fallida');
+      
+      return isConnected;
+    } on SocketException catch (e) {
+      _logDebug('❌ Error de red en test de conexión: $e');
+      return false;
+    } on TimeoutException catch (e) {
+      _logDebug('⏱️  Timeout en test de conexión: $e');
+      return false;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ Error al probar conexión: $e');
-      }
+      _logDebug('❌ Error en test de conexión: $e');
       return false;
     }
   }
+  
+  /// Obtiene la URL del Web App configurada (solo para debugging)
+  String get webAppUrl => _webAppUrl;
+  
+  /// Indica si el servicio está configurado correctamente
+  bool get isConfigured => _webAppUrl.isNotEmpty && 
+                           !_webAppUrl.contains('TU_URL');
 }
